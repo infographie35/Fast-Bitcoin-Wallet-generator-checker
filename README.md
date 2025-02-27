@@ -8,6 +8,12 @@ The ring buffer avoids file deletion overhead by continuously overwriting old en
 
 If you don't want full cpu NUM_WORKERS, just input integer of your choice instead of NUM_WORKERS = os.cpu_count()  
 
+____________________________________________________________________________________________________
+python btc_generator_checker.py
+Loaded xxx addresses from filtered_addresses.tsv
+Total Wallets Processed: xxx,xxx - xxx,xxx per minute - xx,xxx,xxx per hour - xxx,xxx,xxx per day
+____________________________________________________________________________________________________
+
 ## Features
 
 - **Fixed-Size Ring Buffer:**  
