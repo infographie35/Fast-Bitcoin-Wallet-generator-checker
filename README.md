@@ -1,5 +1,5 @@
 # Fast-Bitcoin-Wallet-generator-checker
-Generates random legacy addresses, check if it match a predefined addresses list (filtered_addresses.tsv)
+Generates random legacy addresses, check if it match a legacy predefined addresses list (filtered_addresses.tsv)
 If there is a match, it output to match.txt (PubAddress, WIF, PrivateKey)
 
 
