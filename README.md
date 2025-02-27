@@ -6,6 +6,8 @@ If there is a match, it output to match.txt (PubAddress, WIF, PrivateKey)
 This project implements a high-performance Bitcoin key generation scanner using a fixed-size ring buffer with `mmap` for continuous, efficient I/O. 
 The ring buffer avoids file deletion overhead by continuously overwriting old entries, allowing the process to run seamlessly.
 
+If you don't want full cpu NUM_WORKERS, just input integer of your choice instead of NUM_WORKERS = os.cpu_count()  
+
 ## Features
 
 - **Fixed-Size Ring Buffer:**  
