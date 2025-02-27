@@ -10,7 +10,9 @@ If you don't want full cpu NUM_WORKERS, just input integer of your choice instea
 
 ____________________________________________________________________________________________________
 python btc_generator_checker.py
+
 Loaded xxx addresses from filtered_addresses.tsv
+
 Total Wallets Processed: xxx,xxx - xxx,xxx per minute - xx,xxx,xxx per hour - xxx,xxx,xxx per day
 ____________________________________________________________________________________________________
 
