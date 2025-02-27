@@ -25,3 +25,6 @@ The ring buffer avoids file deletion overhead by continuously overwriting old en
   Install via:
   ```sh
   pip install colorama
+
+
+For fun and education purpose only
