@@ -155,8 +155,18 @@ def writer_process(q, terminate_event, write_offset, lock, total_count):
 # -------------------------------
 def display_process(total_count, terminate_event):
     init(autoreset=True)  # Ensures colors reset automatically after each print
+    start_time = time.time()
     while not terminate_event.is_set():
-        sys.stdout.write(f"\r{Fore.YELLOW}Total Wallets Processed: {total_count.value:,}")
+        elapsed = time.time() - start_time
+        count = total_count.value
+        # Calculate rates; avoid division by zero
+        per_min = count / elapsed * 60 if elapsed > 0 else 0
+        per_hour = count / elapsed * 3600 if elapsed > 0 else 0
+        per_day = count / elapsed * 86400 if elapsed > 0 else 0
+        sys.stdout.write(
+            f"\r{Fore.YELLOW}Total Wallets Processed: {count:,} - "
+            f"{per_min:,.0f} per minute - {per_hour:,.0f} per hour - {per_day:,.0f} per day"
+        )
         sys.stdout.flush()
         time.sleep(0.5)
     print()  # Move to a new line when exiting
