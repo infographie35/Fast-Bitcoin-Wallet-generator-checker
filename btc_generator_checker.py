@@ -156,7 +156,7 @@ def writer_process(q, terminate_event, write_offset, lock, total_count):
 def display_process(total_count, terminate_event):
     init(autoreset=True)  # Ensures colors reset automatically after each print
     while not terminate_event.is_set():
-        sys.stdout.write(f"\r{Fore.YELLOW}Total Wallets Processed: {total_count.value}")
+        sys.stdout.write(f"\r{Fore.YELLOW}Total Wallets Processed: {total_count.value:,}")
         sys.stdout.flush()
         time.sleep(0.5)
     print()  # Move to a new line when exiting
