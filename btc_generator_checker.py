@@ -17,6 +17,7 @@ MATCH_FILE = "match.txt"                # File to append matching blocks (if any
 TSV_LIST_FILE = "filtered_addresses.tsv"  # TSV file with public addresses
 MAX_SIZE = 10 * 1024 * 1024             # 10 MB fixed file size
 NUM_WORKERS = os.cpu_count()            # Number of parallel key generation processes
+BATCH_SIZE = 10                         # Number of keys to generate per batch
 
 # -------------------------------
 # Helper functions for matching (startup check)
@@ -46,7 +47,7 @@ def process_block(block, addresses_set):
     if lines and lines[0].startswith("PubAddress:"):
         addr = lines[0].split(":", 1)[-1].strip()
         if addr in addresses_set:
-            print(f"Match found: {addr}") 
+            print(f"Match found: {addr}")
             with open(MATCH_FILE, "a") as mf:
                 mf.write(block + "\n")
 
@@ -100,19 +101,20 @@ def generate_block():
     return block
 
 # -------------------------------
-# Worker Process: Key Generator
+# Worker Process: Key Generator (with batching)
 # -------------------------------
-def key_generator_worker(q, terminate_event):
+def key_generator_worker(q, terminate_event, batch_size=BATCH_SIZE):
     while not terminate_event.is_set():
-        block = generate_block()
+        blocks = []
+        for _ in range(batch_size):
+            blocks.append(generate_block())
         try:
-            q.put(block, block=False)
+            q.put(blocks, block=False)
         except queue.Full:
-            time.sleep(0.001)
-        time.sleep(0.0001)
+            time.sleep(0.001)  # Short sleep when the queue is full
 
 # -------------------------------
-# Writer Process: Ring Buffer with mmap
+# Writer Process: Ring Buffer with mmap (batch processing)
 # -------------------------------
 def writer_process(q, terminate_event, write_offset, lock, total_count):
     # Create RESULT_FILE if it doesn't exist; fill with zeros
@@ -123,20 +125,21 @@ def writer_process(q, terminate_event, write_offset, lock, total_count):
         mm = mmap.mmap(f.fileno(), MAX_SIZE)
         while not terminate_event.is_set():
             try:
-                block = q.get(timeout=0.1)
+                blocks = q.get(timeout=0.1)  # Expect a batch (list) of blocks
             except queue.Empty:
                 continue
-            block_bytes = block.encode('utf-8')
-            blen = len(block_bytes)
-            with lock:
-                pos = write_offset.value
-                # If not enough space at the end, wrap around to start.
-                if pos + blen > MAX_SIZE:
-                    pos = 0
-                mm.seek(pos)
-                mm.write(block_bytes)
-                write_offset.value = pos + blen
-                total_count.value += 1
+            for block in blocks:
+                block_bytes = block.encode('utf-8')
+                blen = len(block_bytes)
+                with lock:
+                    pos = write_offset.value
+                    # Wrap around if there isn’t enough space
+                    if pos + blen > MAX_SIZE:
+                        pos = 0
+                    mm.seek(pos)
+                    mm.write(block_bytes)
+                    write_offset.value = pos + blen
+                    total_count.value += 1
         mm.flush()
         mm.close()
 
@@ -144,12 +147,11 @@ def writer_process(q, terminate_event, write_offset, lock, total_count):
 # Display Process: Show Total Count in Yellow
 # -------------------------------
 def display_process(total_count, terminate_event):
-    init(autoreset=True)  # Ensures colors reset automatically after each print
+    init(autoreset=True)
     start_time = time.time()
     while not terminate_event.is_set():
         elapsed = time.time() - start_time
         count = total_count.value
-        # Calculate rates; avoid division by zero
         per_min = count / elapsed * 60 if elapsed > 0 else 0
         per_hour = count / elapsed * 3600 if elapsed > 0 else 0
         per_day = count / elapsed * 86400 if elapsed > 0 else 0
@@ -159,14 +161,13 @@ def display_process(total_count, terminate_event):
         )
         sys.stdout.flush()
         time.sleep(0.5)
-    print()  # Move to a new line when exiting
+    print()
 
 # -------------------------------
 # Main Function
 # -------------------------------
 def main():
     addresses_set = load_addresses()
-    # Perform a quick matching check on existing file entries.
     startup_matching_check(addresses_set)
     
     terminate_event = multiprocessing.Event()
@@ -175,18 +176,18 @@ def main():
     write_offset = multiprocessing.Value('I', 0)
     total_count = multiprocessing.Value('I', 0)
     
-    # Start key generation workers using NUM_WORKERS
+    # Start key generation workers
     workers = []
     for _ in range(NUM_WORKERS):
         p = multiprocessing.Process(target=key_generator_worker, args=(q, terminate_event))
         p.start()
         workers.append(p)
     
-    # Start the writer process.
+    # Start the writer process
     writer = multiprocessing.Process(target=writer_process, args=(q, terminate_event, write_offset, lock, total_count))
     writer.start()
     
-    # Start the display process.
+    # Start the display process
     disp = multiprocessing.Process(target=display_process, args=(total_count, terminate_event))
     disp.start()
     
