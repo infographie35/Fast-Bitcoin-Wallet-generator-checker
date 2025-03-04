@@ -4,9 +4,9 @@ import time
 import mmap
 import hashlib
 import base58
-import ecdsa
+import coincurve
 import multiprocessing
-import queue 
+import queue
 from colorama import init, Fore
 
 # -------------------------------
@@ -16,7 +16,7 @@ RESULT_FILE = "result.txt"              # Fixed-size ring buffer file
 MATCH_FILE = "match.txt"                # File to append matching blocks (if any)
 TSV_LIST_FILE = "filtered_addresses.tsv"  # TSV file with public addresses
 MAX_SIZE = 10 * 1024 * 1024             # 10 MB fixed file size
-NUM_WORKERS = os.cpu_count()            # Number of parallel key generation processes, you can manually input integer that fit your preferences
+NUM_WORKERS = os.cpu_count()            # Number of parallel key generation processes
 
 # -------------------------------
 # Helper functions for matching (startup check)
@@ -46,6 +46,7 @@ def process_block(block, addresses_set):
     if lines and lines[0].startswith("PubAddress:"):
         addr = lines[0].split(":", 1)[-1].strip()
         if addr in addresses_set:
+            print(f"Match found: {addr}") 
             with open(MATCH_FILE, "a") as mf:
                 mf.write(block + "\n")
 
@@ -63,50 +64,39 @@ def startup_matching_check(addresses_set):
             print("Error in startup matching check:", e)
 
 # -------------------------------
-# Bitcoin Key Generation
+# Bitcoin Key Generation with coincurve
 # -------------------------------
-class PrivateKey:
-    def __init__(self, private_key=None):
-        self.private_key = os.urandom(32) if private_key is None else private_key
-        self.wif = None
-
-    def privatekey_to_wif(self, compressed=True):
-        pk = self.private_key
-        extended_key = b"\x80" + pk + (b"\x01" if compressed else b"")
-        first_sha = hashlib.sha256(extended_key).digest()
-        second_sha = hashlib.sha256(first_sha).digest()
-        final_key = extended_key + second_sha[:4]
-        self.wif = base58.b58encode(final_key).decode("utf-8")
-        return self.wif
-
-def private_key_to_public_key(pk_bytes, compressed=True):
-    sk = ecdsa.SigningKey.from_string(pk_bytes, curve=ecdsa.SECP256k1)
-    vk = sk.verifying_key
-    if compressed:
-        pubkey = vk.to_string()
-        x = pubkey[:32]
-        y = pubkey[32:]
-        prefix = b'\x02' if (y[-1] % 2 == 0) else b'\x03'
-        return prefix + x
-    else:
-        return b'\x04' + vk.to_string()
+def privatekey_to_wif(pk_bytes, compressed=True):
+    """Convert a private key (bytes) to WIF format."""
+    extended_key = b"\x80" + pk_bytes + (b"\x01" if compressed else b"")
+    first_sha = hashlib.sha256(extended_key).digest()
+    second_sha = hashlib.sha256(first_sha).digest()
+    final_key = extended_key + second_sha[:4]
+    return base58.b58encode(final_key).decode("utf-8")
 
 def public_key_to_address(pubkey_bytes):
+    """Convert a public key (bytes) to a Bitcoin address."""
     sha = hashlib.sha256(pubkey_bytes).digest()
     ripemd = hashlib.new('ripemd160', sha).digest()
-    extended = b'\x00' + ripemd  # Bitcoin mainnet
+    extended = b'\x00' + ripemd  # Bitcoin mainnet prefix
     checksum = hashlib.sha256(hashlib.sha256(extended).digest()).digest()[:4]
     addr = base58.b58encode(extended + checksum).decode("utf-8")
     return addr
 
 def generate_block():
-    key = PrivateKey()
-    pk_bytes = key.private_key
-    wif = key.privatekey_to_wif(compressed=True)
-    pubkey = private_key_to_public_key(pk_bytes, compressed=True)
-    addr = public_key_to_address(pubkey)
+    # Generate a random 32-byte private key
+    private_key_bytes = os.urandom(32)
+    # Create a coincurve PrivateKey object
+    privkey = coincurve.PrivateKey(private_key_bytes)
+    # Derive the compressed public key (coincurve returns compressed by default)
+    public_key_bytes = privkey.public_key.format(compressed=True)
+    
+    # Convert private key to WIF and public key to Bitcoin address
+    wif = privatekey_to_wif(private_key_bytes, compressed=True)
+    addr = public_key_to_address(public_key_bytes)
+    
     # Each block has 3 lines: PubAddress, WIF, PrivateKey
-    block = f"PubAddress: {addr}\nWIF: {wif}\nPrivateKey: {pk_bytes.hex()}\n"
+    block = f"PubAddress: {addr}\nWIF: {wif}\nPrivateKey: {private_key_bytes.hex()}\n"
     return block
 
 # -------------------------------
